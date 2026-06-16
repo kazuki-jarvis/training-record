@@ -52,10 +52,10 @@ input,select{font-family:inherit;}
 .tabbar button{flex:1;background:none;border:none;color:var(--dim);font-size:11px;font-weight:600;padding:6px 0;display:flex;flex-direction:column;align-items:center;gap:3px;}
 .tabbar button.on{color:var(--accent);}
 .tabbar .ic{font-size:19px;}
-.hambtn{position:fixed;top:10px;right:12px;z-index:55;background:var(--panel);border:1px solid var(--line);color:var(--accent);width:40px;height:40px;border-radius:10px;font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.hambtn{position:fixed;top:calc(env(safe-area-inset-top, 0px) + 10px);right:calc(env(safe-area-inset-right, 0px) + 12px);z-index:55;background:var(--panel);border:1px solid var(--line);color:var(--accent);width:40px;height:40px;border-radius:10px;font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
 .menuwrap{position:fixed;inset:0;z-index:70;display:none;}
 .menu-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.55);}
-.menu-panel{position:absolute;top:0;right:0;height:100%;width:66%;max-width:300px;background:#121316;border-left:1px solid var(--line);padding:54px 14px 14px;display:flex;flex-direction:column;gap:7px;box-shadow:-8px 0 24px rgba(0,0,0,.4);}
+.menu-panel{position:absolute;top:0;right:0;height:100%;width:66%;max-width:300px;background:#121316;border-left:1px solid var(--line);padding:calc(env(safe-area-inset-top, 0px) + 54px) 14px 14px;display:flex;flex-direction:column;gap:7px;box-shadow:-8px 0 24px rgba(0,0,0,.4);}
 .menu-ttl{color:var(--dim);font-size:12px;font-weight:700;margin-bottom:4px;}
 .menu-item{background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:11px;padding:14px;font-size:15px;font-weight:600;display:flex;align-items:center;gap:11px;text-align:left;cursor:pointer;}
 .menu-item .ic{font-size:18px;}
@@ -523,12 +523,18 @@ function moveWk(i,d){ const a=wkAll(); const j=i+d; if(j<0||j>=a.length)return; 
 function profile(){ return LS.get('pk_profile',{}); }
 function setHeight(v){ const p=profile(); const n=parseFloat(v); p.height=isNaN(n)?'':n; LS.set('pk_profile',p); }
 function bodyLog(){ return LS.get('pk_bodylog',[]); }
-function addBody(){
-  const last=bodyLog().slice(-1)[0];
-  const wt=prompt('体重（kg）',last?last.weight:''); if(wt===null)return; const w=parseFloat(wt); if(isNaN(w)){ alert('体重は数値で入力してください'); return; }
-  const bfv=prompt('体脂肪率（％・任意・空欄でスキップ）',''); const bf=(bfv===null||bfv.trim()==='')?null:parseFloat(bfv);
-  const b=bodyLog(); b.push({date:fmt(new Date()),weight:w,bf:(bf!=null&&!isNaN(bf))?bf:null}); b.sort((a,c)=>a.date<c.date?-1:(a.date>c.date?1:0)); LS.set('pk_bodylog',b); render();
+function upsertBody(date){
+  const cur=bodyLog().find(x=>x.date===date); const lastW=(bodyLog().slice(-1)[0]||{}).weight;
+  const wt=prompt(date+' の体重（kg）', cur?cur.weight:(lastW!=null?lastW:'')); if(wt===null)return;
+  const w=parseFloat(wt); if(isNaN(w)){ alert('体重は数値で入力してください'); return; }
+  const bfv=prompt('体脂肪率（％・任意・空欄でスキップ）', (cur&&cur.bf!=null)?cur.bf:''); const bf=(bfv===null||bfv.trim()==='')?null:parseFloat(bfv);
+  let b=bodyLog().filter(x=>x.date!==date);
+  b.push({date,weight:w,bf:(bf!=null&&!isNaN(bf))?bf:null});
+  b.sort((a,c)=>a.date<c.date?-1:(a.date>c.date?1:0)); LS.set('pk_bodylog',b); render();
 }
+function addBody(){ upsertBody(fmt(new Date())); }
+function addBodyOn(date){ upsertBody(date); }
+function delBodyDate(date){ if(!confirm(date+' の計測記録を削除しますか？'))return; LS.set('pk_bodylog', bodyLog().filter(x=>x.date!==date)); render(); }
 function delBody(i){ if(!confirm('この計測記録を削除しますか？'))return; const b=bodyLog(); b.splice(i,1); LS.set('pk_bodylog',b); render(); }
 function supps(){ return LS.get('pk_supps',[]); }
 function suppLog(){ return LS.get('pk_supplog',{}); }
@@ -599,7 +605,11 @@ function viewBody(){
     <div class="h2">計測カレンダー</div>
     ${calNav()}
     <div class="cal-grid">${calCells('body')}</div>
-    ${S.calSel?`<div class="wk-meta" style="margin-top:8px">${S.calSel}：${selB?(selB.weight+'kg'+(selB.bf!=null?' / 体脂肪 '+selB.bf+'%':'')):'記録なし'}</div>`:''}`;
+    ${S.calSel?`<div style="margin-top:8px">
+      <div class="wk-meta">${S.calSel}：${selB?(selB.weight+'kg'+(selB.bf!=null?' / 体脂肪 '+selB.bf+'%':'')):'記録なし'}</div>
+      <button class="btn-line" style="margin-top:6px" onclick="addBodyOn('${S.calSel}')">${selB?'✏️ この日の記録を編集':'＋ この日に計測を記録'}</button>
+      ${selB?`<button class="mini" onclick="delBodyDate('${S.calSel}')" style="margin-top:6px;color:var(--danger)">この日の記録を削除</button>`:''}
+    </div>`:'<div class="wk-meta" style="margin-top:8px">カレンダーの日付をタップすると、その日に計測を記録・編集できます（過去の日もOK）。</div>'}`;
 }
 function viewNutri(){
   const t=fmt(new Date()); const todays=suppLog()[t]||[];
